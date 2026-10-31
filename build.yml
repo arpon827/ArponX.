@@ -1,0 +1,42 @@
+name: Build ArponX APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack source
+        run: |
+          cat arponx.part-* > src.tar.xz
+          tar -xJf src.tar.xz
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install NDK and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" "cmake;3.22.1"
+      - name: Create debug key
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=ArponX Debug,O=ArponX,C=US" -keyalg RSA -keysize 2048 -validity 10000
+      - name: Build debug APK
+        working-directory: ArponX
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleUniversalFossDebug --stacktrace
+      - name: Check APK exists
+        run: |
+          APK=$(find ArponX/app/build/outputs/apk -name "*.apk" | head -n 1)
+          test -n "$APK" && ls -lh "$APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArponX-debug-APK
+          path: ArponX/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
